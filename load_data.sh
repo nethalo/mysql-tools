@@ -5,10 +5,9 @@
 # daniel.guzman.burgos@percona.com
 
 set -o pipefail
-clear
 
 readonly max_running_threads=10;
-readonly checkpoint_threshold_pct=50
+readonly checkpoint_threshold_pct=70
 readonly fifoLines=1000
 readonly CHUNKS=8
 
@@ -55,29 +54,35 @@ function loadData () {
                 echo "Error: No file specified: ./load_data.sh \"/path/to/file\""
                 exit 1
         fi
-	
-	fifoFile=/tmp/dani$(date +%s)
-	sleep 1;
+
+	fifoFile=/tmp/dani_$2
 
         /usr/bin/pt-fifo-split --force --fifo $fifoFile --lines $fifoLines "$1" &
         sleep 1;
-        mysql -u$user -e"SET GLOBAL innodb_old_blocks_time = 1000"
+        
+	mysql -u$user -e"SET GLOBAL innodb_old_blocks_time = 1000"
         while [ -p "$fifoFile" ]; do
-                echo "Loading data from part $1 ..."
+                echo "Loading data from part $1 using fifo $fifoFile ..."
                 cat $fifoFile | mysql -u$user $database 2>&1
                 checkThreads
                 monitorCheckpoint
         done
         mysql -u$user -e"SET GLOBAL innodb_old_blocks_time = 0"
+	
+	trap - INT TERM EXIT
 }
 
 function loadDataParallel () {
+	
+	clear
 
 	if [ -z "$1" ]; then
                 echo "Error: No file specified: ./load_data.sh \"/path/to/file\""
                 exit 1
         fi
 
+	echo "Start to load data in parallel"
+	
 	DATAFILE=$1	
         SPLITTED=/tmp/filepart
 
@@ -88,8 +93,8 @@ function loadDataParallel () {
 	mysql -u$user -e"SET GLOBAL innodb_old_blocks_time = 1000"
 
         for d in $(seq $CHUNKS) ; do
-                #mysql database_name < ${SPLITTED}$(($d-1)) &
-		$0 --single-load "${SPLITTED}$(($d-1))" &
+		echo "Launching $0 --single-load ${SPLITTED}$(($d-1)) $d"
+		$0 --single-load "${SPLITTED}$(($d-1))" "$d" &
                 pid[$d]=$!
         done
 
@@ -123,7 +128,7 @@ checkThreads
 monitorCheckpoint
 
 if [ $1 == "--single-load" ]; then
-	loadData "$2"
+	loadData "$2" "$3"
 	exit
 fi
 
