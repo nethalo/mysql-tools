@@ -8,11 +8,18 @@ set -o pipefail
 clear
 
 readonly max_running_threads=10;
-readonly checkpoint_threshold_pct=60
-readonly fifoFile=/tmp/dani
+readonly checkpoint_threshold_pct=50
+readonly fifoLines=1000
+readonly CHUNKS=8
 
 user=root
 database=sakila
+
+function destructor () {
+	mysql -u$user -e"SET GLOBAL innodb_old_blocks_time = 0"
+}
+
+trap destructor INT TERM EXIT
 
 function getLogFileSize () {
         local SIZE=$(mysql -N -e"show variables like 'innodb_log_file_size'" | awk '{print $2}')
@@ -48,12 +55,15 @@ function loadData () {
                 echo "Error: No file specified: ./load_data.sh \"/path/to/file\""
                 exit 1
         fi
+	
+	fifoFile=/tmp/dani$(date +%s)
+	sleep 1;
 
-        /usr/bin/pt-fifo-split --force --fifo $fifoFile --lines 10 "$1" &
+        /usr/bin/pt-fifo-split --force --fifo $fifoFile --lines $fifoLines "$1" &
         sleep 1;
         mysql -u$user -e"SET GLOBAL innodb_old_blocks_time = 1000"
         while [ -p "$fifoFile" ]; do
-                echo "Loading data ..."
+                echo "Loading data from part $1 ..."
                 cat $fifoFile | mysql -u$user $database 2>&1
                 checkThreads
                 monitorCheckpoint
@@ -61,8 +71,60 @@ function loadData () {
         mysql -u$user -e"SET GLOBAL innodb_old_blocks_time = 0"
 }
 
+function loadDataParallel () {
+
+	if [ -z "$1" ]; then
+                echo "Error: No file specified: ./load_data.sh \"/path/to/file\""
+                exit 1
+        fi
+
+	DATAFILE=$1	
+        SPLITTED=/tmp/filepart
+
+        local TTL=1
+        local WATCHDOG_TIME=$((3600*$TTL))
+
+        /opt/bin/split --number=l/$CHUNKS --numeric-suffixes --suffix-length=1 $DATAFILE $SPLITTED
+	mysql -u$user -e"SET GLOBAL innodb_old_blocks_time = 1000"
+
+        for d in $(seq $CHUNKS) ; do
+                #mysql database_name < ${SPLITTED}$(($d-1)) &
+		$0 --single-load "${SPLITTED}$(($d-1))" &
+                pid[$d]=$!
+        done
+
+        WATCHDOG_INIT=$(date +%s)
+        while [ "${#pid[@]}" -ne 0 ]; do
+                count=0
+                for p in $(echo ${pid[@]}); do
+                        kill -0 $p > /dev/null 2>&1
+                        if [ $? -ne 0 ]; then
+                                pid=(${pid[@]:0:$count} ${pid[@]:$(($count + 1))})
+                        fi
+                        count=$(($count+1))
+                done
+
+                WATCHDOG_NOW=$(date +%s)
+                UPTIME=$(($WATCHDOG_NOW-$WATCHDOG_INIT))
+
+                if [ $UPTIME -ge $WATCHDOG_TIME ]; then
+                        echo "Timeout. ${TTL} hours running. Load data interrupted"
+                        exit 1
+                fi
+
+                sleep 1
+        done
+
+}
+
 getLogFileSize
 getCheckPct
 checkThreads
 monitorCheckpoint
-loadData "$1"
+
+if [ $1 == "--single-load" ]; then
+	loadData "$2"
+	exit
+fi
+
+loadDataParallel "$1"
