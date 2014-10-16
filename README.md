@@ -10,7 +10,7 @@ The load_data.sh is a bash code script that allows you to:
 * Load data in small transactions.
 
 ### Requirements: 
-* This script acts also as a wrapper around the [pt-fifo-spli](http://www.percona.com/doc/percona-toolkit/2.2/pt-fifo-split.html "pt-fifo-split") tool from the Percona Toolkit. You will need to have this tool in your server.
+* This script acts as a wrapper around the [pt-fifo-split](http://www.percona.com/doc/percona-toolkit/2.2/pt-fifo-split.html "pt-fifo-split") tool from the Percona Toolkit. You will need to have this tool in your server.
 * The "split" tool from linux [Coreutils](http://www.gnu.org/software/coreutils/ "Coreutils"), version 8.8 or greater is needed. You can use the one that i have in this repo: [split](https://github.com/nethalo/mysql-tools/blob/master/split "Split") or compile one yourself. The reason for this is that the script uses the **--number** parameter
 
 ### Settings
@@ -38,5 +38,19 @@ password=p@$$w0rd
 ``` 
 * **database=sakila** The database name where the destination table exists.
 
+### Run
+To run the script you only need to execute this line:
 
+``` 
+./load_data.sh "/path/to/the/file"
+``` 
 
+Right now, the script can only load non-extended INSERT files, which means, files with this kind of inserts:
+``` 
+INSERT INTO `actor` VALUES (1,'PENELOPE','GUINESS','2006-02-15 02:34:33');
+INSERT INTO `actor` VALUES (2,'NICK','WAHLBERG','2006-02-15 02:34:33');
+INSERT INTO `actor` VALUES (3,'ED','CHASE','2006-02-15 02:34:33');
+INSERT INTO `actor` VALUES (4,'JENNIFER','DAVIS','2006-02-15 02:34:33');
+``` 
+
+Coming soon, "LOAD DATA" types
