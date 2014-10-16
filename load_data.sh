@@ -89,7 +89,7 @@ function loadDataParallel () {
         local TTL=1
         local WATCHDOG_TIME=$((3600*$TTL))
 
-        /opt/bin/split --number=l/$CHUNKS --numeric-suffixes --suffix-length=1 $DATAFILE $SPLITTED
+        /usr/bin/split --number=l/$CHUNKS --numeric-suffixes --suffix-length=1 $DATAFILE $SPLITTED
 	mysql -u$user -e"SET GLOBAL innodb_old_blocks_time = 1000"
 
         for d in $(seq $CHUNKS) ; do
