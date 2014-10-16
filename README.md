@@ -17,7 +17,7 @@ The load_data.sh is a bash code script that allows you to:
 
 This values can be modified to suit better your needs.
 
-* **readonly max_running_threads=10** After this value, the script will pause the data load and will resume after the value of Threads_running is lower than the one defined. You will need to check with: SHOW STATUS LIKE 'Threads_running' a good value for your server
+* **readonly max_running_threads=10** After this value, the script will pause the data load and will resume after the value of Threads_running is lower than the one defined. You will need to check it by running in your mysql: `SHOW STATUS LIKE 'Threads_running';` in order to find out a good value for your server
 * **readonly checkpoint_threshold_pct=70** The script will run only if the checkpoint age (Amount of transactions still in InnoDB Log File but not on the tablespace) is below 70% of total available size
 * **readonly fifoLines=1000** The number of lines that pt-fifo-split will use per read.
 * **readonly CHUNKS=8** The number of **Parallel** running threads. This shouldn't be more than the available CPU cores.
