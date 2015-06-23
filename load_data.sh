@@ -27,7 +27,7 @@ function getLogFileSize () {
 }
 
 function getCheckPct () {
-        chkckpointLimit=$(echo "${checkpoint_threshold_pct}/100*10485760" | bc -l | awk -F. '{print $1}')
+	chkckpointLimit=$(echo "${checkpoint_threshold_pct}/100*${totalBytes}" | bc -l | awk -F. '{print $1}')
 }
 
 function checkThreads () {

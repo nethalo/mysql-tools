@@ -11,7 +11,9 @@ The load_data.sh is a bash code script that allows you to:
 
 ### Requirements: 
 * This script acts as a wrapper around the [pt-fifo-split](http://www.percona.com/doc/percona-toolkit/2.2/pt-fifo-split.html "pt-fifo-split") tool from the Percona Toolkit. You will need to have this tool in your server.
-* The "split" tool from linux [Coreutils](http://www.gnu.org/software/coreutils/ "Coreutils"), version 8.8 or greater is needed. You can use the one that i have in this repo: [split](https://github.com/nethalo/mysql-tools/blob/master/split "Split") or compile one yourself. The reason for this is that the script uses the **--number** parameter
+* The "split" tool from linux [Coreutils](http://www.gnu.org/software/coreutils/ "Coreutils"), version 8.8 or greater is needed. You can use the one that i have in this repo: 
+[split](https://github.com/nethalo/mysql-tools/blob/master/split "Split") 
+Or compile one yourself. The reason for this is that the script uses the **--number** parameter
 
 ### Settings
 
