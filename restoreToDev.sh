@@ -16,7 +16,7 @@ logFile="/var/log/mysql/xtrabackup.log"
 mysqlUser=root
 mysqlPort=3306
 backupPath="${backupPath-"/root/backups/"}"
-restorePath="/root/datadir"
+restorePath="/var/lib/datadir"
 email="daniel.guzman.burgos@percona.com"
 
 # Function definitions
@@ -146,8 +146,9 @@ function restoreBackup (){
 
 	logInfo "Enter restore backup function"
 	mkdir -p $restorePath &> /dev/null
+	rm -rf $restorePath/* &> /dev/null
 	logInfo "Created directory $restorePath"
-	restoreCommand="innobackupex --apply-log "	
+	restoreCommand="innobackupex --apply-log "
 
 	if [ $isCompress -eq 1 ]; then
 		logInfo "Backup compressed. Start to decompress: innobackupex --decompress $backupPath"
@@ -163,10 +164,33 @@ function restoreBackup (){
 	out=$($restoreCommand $backupPath 2>&1)
 	verifyExecution "$?" "Failure while preparing backup. $out" true
         logInfo "Backup prepared"
+
+	logInfo "Copy files to datadir: $restorePath"
+	out=$(cp -R $backupPath/* $restorePath/ 2>&1)
+	verifyExecution "$?" "Cannot copy files to $restorePath. $out" true
+	logInfo "Files copied to datadir $restorePath"
+
+	logInfo "Change owner of files to mysql"
+	chown -R mysql:mysql $restorePath/
+	logInfo "Datadir owned by mysql (chown -R mysql:mysql $restorePath)/"
+}
+
+function verifyPortFree () {
+	out=$(netstat -tpa | grep 3310)
+	if [ $? -eq 0 ]; then
+		verifyExecution "1" "Port 3310 busy. Shutdown stalled mysql instance in port 3310 and retry" true
+	fi
+	logInfo "Port 3310 available"
 }
 
 function launchMysql () {
-	$($(which mysql) --basedir=/usr --datadir=$restorePath --plugin-dir /usr/lib/mysql/plugin --user=mysql --log-error=${restorePath}/error.log --pid-file=${restorePath}/mysqld.pid --socket=${restorePath}/mysqld.sock --port=3310)
+
+	logInfo "Launching small instance of MySQL"
+	sed -i '/innodb_fast_checksum/d' $restorePath/backup-my.cnf
+
+	out=$($(which mysqld) --defaults-file=${restorePath}/backup-my.cnf --basedir=/usr --datadir=$restorePath --plugin-dir /usr/lib/mysql/plugin --user=mysql --log-error=${restorePath}/error.log --pid-file=${restorePath}/mysqld.pid --explicit_defaults_for_timestamp=true --socket=${restorePath}/mysqld.sock --port=3310 2>&1 &)
+	verifyExecution "$?" "Cannot launch MySQL instance. $out. More info: ${restorePath}/error.log" true
+	logInfo "MySQL instance launched: $(which mysqld) --defaults-file=${restorePath}/backup-my.cnf --basedir=/usr --datadir=$restorePath --plugin-dir /usr/lib/mysql/plugin --user=mysql --log-error=${restorePath}/error.log --pid-file=${restorePath}/mysqld.pid --explicit_defaults_for_timestamp=true --socket=${restorePath}/mysqld.sock --port=3310 2>&1"
 }
 
 function verify () {
@@ -175,7 +199,20 @@ function verify () {
 	verifyBackupAvailable
 	verifySpace
 	verifyMemory
-	restoreBackup
+}
+
+function sanitize () {
+	echo "Here is where the magic happens"
+}
+
+function logicalBackup () {
+	echo "Do the mysqldump"
+}
+
+function shutdownMysql () {
+	sleep 10 #temporal
+	mysqladmin --socket=${restorePath}/mysqld.sock shutdown
+	logInfo "MySQL instance shutdown."
 }
 
 if [ -z "$1" ]; then
@@ -195,3 +232,8 @@ fi
 
 setLockFile
 verify
+restoreBackup
+launchMysql
+sanitize
+logicalBackup
+shutdownMysql
