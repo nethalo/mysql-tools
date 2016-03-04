@@ -16,7 +16,7 @@ logFile="/var/log/mysql/xtrabackup.log"
 mysqlUser=root
 mysqlPort=3306
 backupPath="${backupPath-"/root/backups/"}"
-restorePath="/root"
+restorePath="/root/datadir"
 email="daniel.guzman.burgos@percona.com"
 
 # Function definitions
@@ -80,7 +80,23 @@ function verifyXtrabackup () {
         logInfo "[OK] Found 'innobackupex' bin"
 }
 
+function verifyMysqlBin () {
+	which mysql &> /dev/null
+        verifyExecution "$?" "Cannot find mysql bin" true
+        logInfo "[OK] Found 'mysql' bin"
+}
+
+function verifyQpress () {
+	which qpress &> /dev/null
+        verifyExecution "$?" "Cannot find qpress tool" true
+        logInfo "[OK] Found 'qpress' bin"
+}
+
 function verifySpace () {
+
+	isCompress=0
+	isCompact=0
+
 	spaceOnDisk=$(df -P ${restorePath} | tail -1 | awk '{print $4*1024}')
 	verifyExecution "$?" "Cannot find space available on disk $restorePath" true
 	backupSize=$(du -sb $backupPath | awk '{print $1}')
@@ -88,8 +104,10 @@ function verifySpace () {
 	type=$(file -bi $backupPath/xtrabackup_info* | head -n1)
 	verifyExecution "$?" "Cannot find file $backupPath/xtrabackup_info. No way to find if is compressed or not. Space available might not be enough. Run at your own risk!"
 	if [[ $type != *"text"* ]]; then
+		verifyQpress
 		logInfo "Compressed backup"
 		backupSize=$(($backupSize*43))
+		isCompress=1
 	fi
 	out=$(cat $backupPath/xtrabackup_checkpoints | grep full-backuped)
 	verifyExecution "$?" "Backup is not full backup." true
@@ -97,27 +115,67 @@ function verifySpace () {
 	if [ $? -eq 0 ]; then
 		logInfo "Compact backup"
 		backupSize=$( printf "%.0f" $(echo $backupSize*1.02 | bc))
+		isCompact=1
 	else
 		logInfo "Regular full backup (not compressed, not compact)"
 	fi
 
 	percent=$(printf "%.0f" $(echo $spaceOnDisk*0.9 | bc))
 	if [ $backupSize -gt $percent ]; then
-		verifyExecution "$?" "Not enough space in disk for restore." true
+		verifyExecution "1" "Not enough space in disk for restore." true
 	fi
 	logInfo "Space available for restore."
 }
 
 function verifyBackupAvailable () {
 	out=$(find $backupPath -maxdepth 1 -type f | grep xtrabackup_info)
-	verifyExecution "$?" "Backup doesn't exists" true
+	verifyExecution "$?" "Backup doesn't exists. $out" true
         logInfo "[OK] Found backup in $backupPath"
+}
+
+function verifyMemory () {
+	memoryAvailable=$(free -b | grep Mem | awk '{print $4+$7}')
+	percent=$(printf "%.0f" $(echo $memoryAvailable*0.8 | bc))
+	if [ $percent -lt 536870912  ]; then
+		verifyExecution "1" "Not enough memory available to fire up a mysql instance" true
+	fi
+	logInfo "Memory available for restore"
+}
+
+function restoreBackup (){
+
+	logInfo "Enter restore backup function"
+	mkdir -p $restorePath &> /dev/null
+	logInfo "Created directory $restorePath"
+	restoreCommand="innobackupex --apply-log "	
+
+	if [ $isCompress -eq 1 ]; then
+		logInfo "Backup compressed. Start to decompress: innobackupex --decompress $backupPath"
+		out=$(innobackupex --decompress $backupPath 2>&1)
+		verifyExecution "$?" "Failure while decompressing the backup. $out" true
+		logInfo "Backup decompressed"
+	elif [ $isCompact -eq 1 ]; then
+		logIngo "Backup compact. Adding --rebuild-indexes parameter"
+		restoreCommand="$restoreCommand --rebuild-indexes "
+	fi
+
+	logInfo "Preparing backup: $restoreCommand $backupPath"	
+	out=$($restoreCommand $backupPath 2>&1)
+	verifyExecution "$?" "Failure while preparing backup. $out" true
+        logInfo "Backup prepared"
+}
+
+function launchMysql () {
+	$($(which mysql) --basedir=/usr --datadir=$restorePath --plugin-dir /usr/lib/mysql/plugin --user=mysql --log-error=${restorePath}/error.log --pid-file=${restorePath}/mysqld.pid --socket=${restorePath}/mysqld.sock --port=3310)
 }
 
 function verify () {
 	verifyXtrabackup
+	verifyMysqlBin
 	verifyBackupAvailable
 	verifySpace
+	verifyMemory
+	restoreBackup
 }
 
 if [ -z "$1" ]; then
