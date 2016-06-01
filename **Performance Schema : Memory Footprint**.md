@@ -1,32 +1,14 @@
 # **Performance Schema / Memory Footprint**
 
-Table of Contents
-=================
-
-  * [<strong>Performance Schema / Memory Footprint</strong>](#performance-schema--memory-footprint)
-    * [Performance Schema in a nutshell](#performance-schema-in-a-nutshell)
-    * [P_S memory footprint](#p_s-memory-footprint)
-      * [What's currently available in 5.6?](#whats-currently-available-in-56)
-        * [Limitations of fixed memalloc](#limitations-of-fixed-memalloc)
-      * [What's new in 5.7?](#whats-new-in-57)
-        * [How to set memory allocation?](#how-to-set-memory-allocation)
-        * [How much memory the Performance Schema is using?](#how-much-memory-the-performance-schema-is-using)
-    * [P_S Memory metrics](#p_s-memory-metrics)
-      * [Memory tables](#memory-tables)
-      * [Memory instruments](#memory-instruments)
-    * [Using Sys Schema](#using-sys-schema)
-        * [memory_by_host_by_current_bytes](#memory_by_host_by_current_bytes)
-        * [memory_by_thread_by_current_bytes](#memory_by_thread_by_current_bytes)
-        * [memory_by_user_by_current_bytes](#memory_by_user_by_current_bytes)
-        * [memory_global_by_current_bytes](#memory_global_by_current_bytes)
-        * [memory_global_total](#memory_global_total)
-    * [More info](#more-info)
+[TOC]
 
 ## Performance Schema in a nutshell
 
 Performance Schema is a mechanism to collect and report run time statistics for running MySQL server. These statistics are stored-in and fetched-from internal memory buffers.
 
 ## P_S memory footprint
+
+How much memory does P_S uses by just itself.
 
 ### What's currently available in 5.6?
 
@@ -66,6 +48,70 @@ For the server variables (which control buffer size), you can now specify:
 With -1, as the Performance Schema collects data, memory is allocated in the corresponding buffer. The buffer size is unbounded, and may grow with the load.
 
 With N, once the buffer size reaches N, no more memory is allocated. Data collected by the Performance Schema for this buffer is lost, and any corresponding “lost instance” counters are incremented.
+
+Lost instances can be tracked on the server status:
+
+```mysql
+mysql> pager head
+PAGER set to 'head'
+mysql> show status like '%lost';
++-----------------------------------------------+-------+
+| Variable_name                                 | Value |
++-----------------------------------------------+-------+
+| Performance_schema_accounts_lost              | 0     |
+| Performance_schema_cond_classes_lost          | 0     |
+| Performance_schema_cond_instances_lost        | 0     |
+| Performance_schema_digest_lost                | 0     |
+| Performance_schema_file_classes_lost          | 0     |
+| Performance_schema_file_handles_lost          | 0     |
+| Performance_schema_file_instances_lost        | 0     |
+30 rows in set (0.00 sec)
+```
+
+Variables that can be autosized/autoscaled, are set to -1 by default:
+
+```mysql
+mysql> show variables where variable_name like "performance_schema%" and variable_value=-1;
++------------------------------------------------------+-------+
+| Variable_name                                        | Value |
++------------------------------------------------------+-------+
+| performance_schema_accounts_size                     | -1    |
+| performance_schema_hosts_size                        | -1    |
+| performance_schema_max_cond_instances                | -1    |
+| performance_schema_max_file_instances                | -1    |
+| performance_schema_max_index_stat                    | -1    |
+| performance_schema_max_metadata_locks                | -1    |
+| performance_schema_max_mutex_instances               | -1    |
+| performance_schema_max_prepared_statements_instances | -1    |
+| performance_schema_max_program_instances             | -1    |
+| performance_schema_max_rwlock_instances              | -1    |
+| performance_schema_max_socket_instances              | -1    |
+| performance_schema_max_table_handles                 | -1    |
+| performance_schema_max_table_instances               | -1    |
+| performance_schema_max_table_lock_stat               | -1    |
+| performance_schema_max_thread_instances              | -1    |
+| performance_schema_setup_actors_size                 | -1    |
+| performance_schema_setup_objects_size                | -1    |
+| performance_schema_users_size                        | -1    |
++------------------------------------------------------+-------+
+18 rows in set, 1 warning (0.01 sec)
+```
+
+You can also check https://dev.mysql.com/doc/refman/5.7/en/performance-schema-system-variables.html and find out which variables are autosized or autoscaled
+
+What's the difference:
+
+- **auto-sized:** Based on estimated server load/configuration, value of this variable would be determined by performance schema during startup.
+- **auto-scaled:** Based on actual runtime requirement, memory is allocated for buffers controlled by these variables.
+
+#### How auto-sized values are calculated?
+
+For each **autosized** parameter that is not set at server startup (or is set to −1), the Performance Schema determines how to set its value based on the value of the following system values, which are considered as “hints” about how you have configured your MySQL server:
+
+> max_connections
+> open_files_limit
+> table_definition_cache
+> table_open_cache
 
 #### How much memory the Performance Schema is using?
 
@@ -264,7 +310,7 @@ mysql> select count(*) from setup_instruments where name like 'memory%' and enab
 1 row in set (0.00 sec)
 ```
 
-Let's enable all of them:
+Let's enable the rest of them (321):
 
 ```mysql
 mysql> update setup_instruments set enabled = 'yes' where name like 'memory%';
@@ -272,7 +318,7 @@ Query OK, 321 rows affected (0.00 sec)
 Rows matched: 391  Changed: 321  Warnings: 0
 ```
 
-Now, to get the statistics, we could just query the **p_s.memory_%** tables OR we could use the Sys Schema!
+Now, to get the statistics, we could just query the **p_s.memory_%** tables OR we could use the **Sys Schema!**
 
 ## Using Sys Schema
 
@@ -301,6 +347,8 @@ mysql> select * from memory_by_host_by_current_bytes;
 
 It's based on the table **performance_schema.memory_summary_by_host_by_event_name**
 
+https://dev.mysql.com/doc/refman/5.7/en/sys-memory-by-host-by-current-bytes.html
+
 #### memory_by_thread_by_current_bytes
 
 Summarizes memory use by threads using the 5.7 Performance Schema instrumentation.
@@ -326,6 +374,8 @@ mysql> select * from sys.memory_by_thread_by_current_bytes limit 10;
 
 Based on the tables **performance_schema.memory_summary_by_thread_by_event_name** and **performance_schema.threads.**
 
+https://dev.mysql.com/doc/refman/5.7/en/sys-memory-by-thread-by-current-bytes.html
+
 #### memory_by_user_by_current_bytes
 
 Summarizes memory use by user using the 5.7 Performance Schema instrumentation.
@@ -342,6 +392,8 @@ mysql> select * from memory_by_user_by_current_bytes;
 ```
 
 Based on the table **performance_schema.memory_summary_by_user_by_event_name**
+
+https://dev.mysql.com/doc/refman/5.7/en/sys-memory-by-user-by-current-bytes.html
 
 #### memory_global_by_current_bytes
 
@@ -393,9 +445,11 @@ mysql> select * from memory_global_by_current_bytes where event_name like 'memor
 
 This view is based on the table **performance_schema.memory_summary_global_by_event_name**
 
+https://dev.mysql.com/doc/refman/5.7/en/sys-memory-global-by-current-bytes.html
+
 #### memory_global_total
 
-Shows the total memory usage within the server globally.
+Shows the total memory usage within the server globally. And by globally, it means by "event instrumented"
 
 ```
 mysql> select * from memory_global_total;
@@ -409,10 +463,13 @@ mysql> select * from memory_global_total;
 
 Based on the **performance_schema.memory_summary_global_by_event_name** table.
 
+https://dev.mysql.com/doc/refman/5.7/en/sys-memory-global-total.html
+
 ## More info
 
 - http://mysqlserverteam.com/new-in-mysql-5-7-performance-schema-scalable-memory-allocation/
 - https://dev.mysql.com/doc/refman/5.7/en/performance-schema-memory-model.html
 - https://dev.mysql.com/doc/refman/5.7/en/memory-summary-tables.html
 - https://dev.mysql.com/doc/refman/5.7/en/show-engine.html
+- https://dev.mysql.com/doc/refman/5.7/en/performance-schema-startup-configuration.html
 
