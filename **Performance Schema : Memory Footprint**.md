@@ -1,6 +1,27 @@
 # **Performance Schema / Memory Footprint**
 
-[TOC]
+Table of Contents
+=================
+
+  * [<strong>Performance Schema / Memory Footprint</strong>](#performance-schema--memory-footprint)
+    * [Performance Schema in a nutshell](#performance-schema-in-a-nutshell)
+    * [P_S memory footprint](#p_s-memory-footprint)
+      * [What's currently available in 5.6?](#whats-currently-available-in-56)
+        * [Limitations of fixed memalloc](#limitations-of-fixed-memalloc)
+      * [What's new in 5.7?](#whats-new-in-57)
+        * [How to set memory allocation?](#how-to-set-memory-allocation)
+        * [How auto-sized values are calculated?](#how-auto-sized-values-are-calculated)
+        * [How much memory the Performance Schema is using?](#how-much-memory-the-performance-schema-is-using)
+    * [P_S Memory metrics](#p_s-memory-metrics)
+      * [Memory tables](#memory-tables)
+      * [Memory instruments](#memory-instruments)
+    * [Using Sys Schema](#using-sys-schema)
+        * [memory_by_host_by_current_bytes](#memory_by_host_by_current_bytes)
+        * [memory_by_thread_by_current_bytes](#memory_by_thread_by_current_bytes)
+        * [memory_by_user_by_current_bytes](#memory_by_user_by_current_bytes)
+        * [memory_global_by_current_bytes](#memory_global_by_current_bytes)
+        * [memory_global_total](#memory_global_total)
+    * [More info](#more-info)
 
 ## Performance Schema in a nutshell
 
